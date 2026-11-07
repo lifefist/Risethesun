@@ -1631,4 +1631,86 @@ TXT.zh.yq = '第 {0} 年 Q{1}';
 TXT.en.yq = 'Y{0} Q{1}';
 if (typeof render === 'function') render();
 </script>
+<script>
+/* ===== v3.9 新增：每局结束的简短任务总结 ===== */
+(function(){
+  var zh = function(){ try{ return (typeof LANG==='undefined') ? true : (LANG==='zh'); }catch(e){ return true; } };
+  var n0 = function(v){ return (typeof v==='number' && isFinite(v)) ? v : 0; };
+
+  /* 顺手补上"第X年QX"文案（时间显示还是 yq 的话，这里一起修好） */
+  try{
+    TXT.zh.yq = TXT.zh.yq || '第 {0} 年 Q{1}';
+    TXT.en.yq = TXT.en.yq || 'Y{0} Q{1}';
+  }catch(e){}
+
+  function block(){
+    var Z = zh();
+    var st = (typeof S!=='undefined' && S) ? S : null;
+    var r  = (st && st.result) ? st.result : {};
+    var co = (st && st.co) ? st.co : (Z ? '未命名公司' : 'Untitled');
+    var diff = '';
+    try{ diff = tx(st.diff.n); }catch(e){ diff = ''; }
+
+    var launched = n0(st && st.launched);
+    var q1 = n0(st && st.firstQ);
+    var fin = n0(st && st.firstIn);
+    var grade = r.tier || '—';
+    var pos = (r.pos != null) ? (Z ? ('第 ' + r.pos + ' 位') : ('#' + r.pos))
+                             : (Z ? '未入榜' : 'not ranked');
+
+    var a = Z
+      ? '你用「' + co + '」在' + diff + '难度走完 40 个季度：上市 ' + launched + ' 个产品，评级 ' + grade + '，行业名次 ' + pos + '。'
+      : 'You took "' + co + '" through 40 quarters on ' + diff + ': ' + launched + ' launch(es), grade ' + grade + ', rank ' + pos + '.';
+
+    var b = (launched > 0 && q1 > 0)
+      ? (Z ? ('最快的一个在第 ' + q1 + ' 个季度上市' + (fin > 0 ? ('，抢先对手 ' + fin + ' 次') : '') + '。')
+           : ('Fastest launch in quarter ' + q1 + (fin > 0 ? (' — first in class ' + fin + ' time(s)') : '') + '.'))
+      : (Z ? '这一局没有产品走到上市。' : 'No product reached the market this run.');
+
+    var c;
+    if(launched === 0){
+      c = Z ? '💡 下次早点立项，把钱集中在 1～2 条管线上，比同时铺开更容易出成果。'
+            : '💡 Tip: file earlier and concentrate cash on one or two projects rather than spreading thin.';
+    }else if(grade === 'S' || grade === 'A'){
+      c = Z ? '💡 这个成绩已经很硬了，可以试试「硬核」难度。'
+            : '💡 Strong result — try the Hard difficulty next.';
+    }else if(fin > 0){
+      c = Z ? '💡 抢先上市是这局的关键，下一局继续抢对手没做的适应症。'
+            : '💡 Being first in class carried this run — keep picking indications the rival ignores.';
+    }else{
+      c = Z ? '💡 上市后多给点销售投入，把市场份额守住，账面才好看。'
+            : '💡 Spend more on sales after launch to defend market share.';
+    }
+
+    return '<div class="opt runsm" style="margin-top:10px">'
+      + '<div style="font-weight:700">📋 ' + (Z ? '本局小结' : 'Run Summary') + '</div>'
+      + '<div class="sub" style="color:#cfe0ff;font-size:13px;margin-top:6px">' + a + '</div>'
+      + '<div class="sub" style="color:#cfe0ff;font-size:13px">' + b + '</div>'
+      + '<div class="sub" style="font-size:13px">' + c + '</div>'
+      + '</div>';
+  }
+  function safeBlock(){ try{ return block(); }catch(e){ return ''; } }
+
+  var hooked = false;
+  try{
+    if(typeof resultSheet === 'function'){
+      var _rs = resultSheet;
+      resultSheet = function(){ return _rs.apply(this, arguments) + safeBlock(); };
+      hooked = true;
+    }
+  }catch(e){}
+  if(!hooked){
+    try{
+      new MutationObserver(function(){
+        var sh = document.getElementById('sheet');
+        if(!sh || sh.querySelector('.runsm') || !sh.querySelector('h2')) return;
+        if(!(typeof S !== 'undefined' && S && S.result)) return;
+        var head = sh.querySelector('h2').textContent || '';
+        if(head.indexOf(zh() ? '期末结算' : 'Final Settlement') < 0) return;
+        sh.insertAdjacentHTML('beforeend', safeBlock());
+      }).observe(document.body, {childList:true, subtree:true});
+    }catch(e){}
+  }
+})();
+</script>
 </html>
