@@ -1625,4 +1625,10 @@ document.addEventListener('click',function(){
 })();
 </script>
 </body>
+<script>
+/* ===== 修复：顶栏时间显示 yq（中英文同步生效）===== */
+TXT.zh.yq = '第 {0} 年 Q{1}';
+TXT.en.yq = 'Y{0} Q{1}';
+if (typeof render === 'function') render();
+</script>
 </html>
