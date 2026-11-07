@@ -1879,27 +1879,49 @@ if (typeof render === 'function') render();
   addBtn();
 })();
 </script>
-<!-- 全球统计接口修复补丁（2026-11）：把旧的两段式地址自动改写为新的一段式地址 -->
+<!-- ===== 全球统计修复补丁 v2 ===== -->
 <script>
 (function () {
-  var HOST = 'countapi.mileshilliard.com';
-  var origFetch = window.fetch;
-  if (!origFetch) return;
-  window.fetch = function (input, init) {
-    try {
-      var url = (typeof input === 'string') ? input : (input && input.url);
-      if (url && url.indexOf(HOST) !== -1 && url.indexOf('/api/v1/') !== -1) {
-        var q = url.split('?');
-        var seg = q[0].split('/api/v1/')[1].split('/');  // 例：get / pharma_rush_szb7 / total
-        var action = seg.shift();                        // get | hit | set
-        if (seg.length > 1) {                            // 只有老式两段地址才改写
-          var newUrl = 'https://' + HOST + '/api/v1/' + action + '/' + seg.join('_') + (q[1] ? '?' + q[1] : '');
-          return origFetch.call(this, newUrl, init);
-        }
-      }
-    } catch (e) {}
-    return origFetch.apply(this, arguments);
-  };
+  var API = 'https://countapi.mileshilliard.com/api/v1/';
+
+  function statsFetch(path, ms) {
+    var seg = String(path).split('/');
+    var action = seg[0], key = seg[1], val = seg[2];
+    var url = (action === 'set')
+      ? API + 'set/' + key + '?value=' + encodeURIComponent(val)
+      : API + action + '/' + key;
+
+    return new Promise(function (resolve, reject) {
+      var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); reject(new Error('timeout')); }, ms || 7000);
+
+      fetch(url, { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+        .then(function (r) {
+          clearTimeout(timer);
+          if (r.status === 404) { resolve(0); return null; }  // 键还没创建 → 当作 0，不再中断
+          if (!r.ok) throw new Error('http ' + r.status);
+          return r.json();
+        })
+        .then(function (j) {
+          if (j === null) return;
+          if (typeof j === 'number') { resolve(j); return; }
+          var v = (j && j.value !== undefined) ? Number(j.value) : NaN;  // 新版是字符串，转成数字
+          resolve(isNaN(v) ? null : v);
+        })
+        .catch(function (e) { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  window.gFetch = statsFetch;   // 接管原来的统计请求函数
+
+  // 右下角自检：看到绿色 ON 就说明新补丁已生效
+  window.addEventListener('load', function () {
+    var ok = (window.gFetch === statsFetch);
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;right:4px;bottom:4px;z-index:2147483647;font:10px/1.3 monospace;background:rgba(0,0,0,.65);color:' + (ok ? '#7fff9a' : '#ff8a8a') + ';padding:2px 5px;border-radius:4px;pointer-events:none';
+    d.textContent = ok ? 'stats-fix v2: ON' : 'stats-fix v2: FAILED';
+    document.body.appendChild(d);
+  });
 })();
 </script>
 </html>
