@@ -1721,7 +1721,7 @@ if (typeof render === 'function') render();
 (function(){
 
   /* ★★ 填你自己的联系方式：微信号 / QQ号 / 邮箱都可以，玩家提交后会看到 ★★ */
-  var FB_CONTACT = '微信号：Iamthereforyou';
+  var FB_CONTACT = '微信公众号：GoAiLife';
 
   /* 方式一：保持空字符串，不打开在线问卷 */
   var FB_URL = '';
@@ -1880,3 +1880,26 @@ if (typeof render === 'function') render();
 })();
 </script>
 </html>
+<!-- 全球统计接口修复补丁（2026-11）：把旧的两段式地址自动改写为新的一段式地址 -->
+<script>
+(function () {
+  var HOST = 'countapi.mileshilliard.com';
+  var origFetch = window.fetch;
+  if (!origFetch) return;
+  window.fetch = function (input, init) {
+    try {
+      var url = (typeof input === 'string') ? input : (input && input.url);
+      if (url && url.indexOf(HOST) !== -1 && url.indexOf('/api/v1/') !== -1) {
+        var q = url.split('?');
+        var seg = q[0].split('/api/v1/')[1].split('/');  // 例：get / pharma_rush_szb7 / total
+        var action = seg.shift();                        // get | hit | set
+        if (seg.length > 1) {                            // 只有老式两段地址才改写
+          var newUrl = 'https://' + HOST + '/api/v1/' + action + '/' + seg.join('_') + (q[1] ? '?' + q[1] : '');
+          return origFetch.call(this, newUrl, init);
+        }
+      }
+    } catch (e) {}
+    return origFetch.apply(this, arguments);
+  };
+})();
+</script>
