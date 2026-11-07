@@ -1623,6 +1623,43 @@ document.addEventListener('click',function(){
     openSheet(startHTML);
   }
 })();
+<script>
+/* ===== 修复：界面时间显示成 "yq" ===== */
+(function(){
+  var LKEY = 'pharma_lang', SKEY = 'pharma_v3_save';
+  function label(){
+    var q = 0;
+    try{
+      var s = JSON.parse(localStorage.getItem(SKEY) || 'null');
+      if (s) q = Number(s.q || s.quarter || 0) || 0;
+    }catch(e){}
+    if (!q) return null;
+    var y = Math.floor((q - 1) / 4) + 1, qi = (q - 1) % 4 + 1;
+    var en = false;
+    try{ en = localStorage.getItem(LKEY) === 'en'; }catch(e){}
+    return en ? ('Y' + y + ' Q' + qi) : ('第 ' + y + ' 年 Q' + qi);
+  }
+  function fix(){
+    var t = label();
+    if (!t) return;
+    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false), n;
+    while ((n = w.nextNode())){
+      var v = n.nodeValue;
+      if (v && /(^|[^A-Za-z])yq([^A-Za-z]|$)/i.test(v)) n.nodeValue = v.replace(/yq/gi, t);
+    }
+  }
+  function start(){
+    fix();
+    try{
+      new MutationObserver(function(){ fix(); })
+        .observe(document.body, {childList:true, subtree:true, characterData:true});
+    }catch(e){}
+    setInterval(fix, 1500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
 </script>
 </body>
 </html>
