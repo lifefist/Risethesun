@@ -1713,4 +1713,170 @@ if (typeof render === 'function') render();
   }
 })();
 </script>
+<script>
+/* =====================================================================
+   v3.9 新增：游戏内「反馈」按钮（方式一：本地收集 + 一键复制）
+   ★ 你只需要改下面这一行 FB_CONTACT ★
+   ===================================================================== */
+(function(){
+
+  /* ★★ 填你自己的联系方式：微信号 / QQ号 / 邮箱都可以，玩家提交后会看到 ★★ */
+  var FB_CONTACT = '微信号：Iamthereforyou';
+
+  /* 方式一：保持空字符串，不打开在线问卷 */
+  var FB_URL = '';
+
+  var KEY = 'pharma_v3_feedback';
+  var TYPE = { zh:['🐞 问题/bug','⚖️ 平衡性','✨ 新玩法','💬 其他'],
+               en:['🐞 Bug','⚖️ Balance','✨ Idea','💬 Other'] };
+  var cur = 0, draft = '';
+
+  function L(){ return (typeof LANG!=='undefined' && LANG==='en') ? 'en' : 'zh'; }
+  function Z(){ return L()==='zh'; }
+  function esc2(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  /* 顺手补上时间显示那条文案（顶栏还显示 yq 的话一起修好） */
+  var dictOK = false;
+  try{
+    if(typeof TXT!=='undefined' && TXT && TXT.zh){
+      if(!TXT.zh.yq) TXT.zh.yq='第 {0} 年 Q{1}';
+      if(!TXT.en.yq) TXT.en.yq='Y{0} Q{1}';
+      TXT.zh.fb='反馈'; TXT.en.fb='Feedback';
+      dictOK = true;
+    }
+  }catch(e){}
+
+  /* ---------- 样式 ---------- */
+  var st=document.createElement('style');
+  st.textContent=[
+    '#fbwrap .sheet{font-size:14px}',
+    '#fbwrap h2{margin:0 0 6px}',
+    '#fbwrap textarea{font:inherit;color:var(--txt);background:#0e1524;border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;min-height:96px;box-sizing:border-box;resize:vertical}',
+    '#fbwrap textarea::placeholder{color:#5d6c88}',
+    '#fbwrap .chips{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:10px 0 8px}',
+    '#fbwrap .chip{border:1px solid var(--line);border-radius:10px;background:#111a2b;color:var(--dim);font:inherit;font-size:12px;padding:9px 6px;text-align:center;cursor:pointer}',
+    '#fbwrap .chip.on{border-color:var(--brand);background:#16305c;color:#cfe0ff;font-weight:700}',
+    '#fbwrap .tip{font-size:12px;color:var(--dim);line-height:1.6;margin:6px 0 10px}',
+    '#fbwrap .done{display:none;margin-top:10px;border:1px solid #2f7a5c;background:#123326;border-radius:12px;padding:10px;color:#9fe8c4;font-size:13px;line-height:1.6}',
+    '#fbwrap .done.on{display:block}',
+    '#fbwrap .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}'
+  ].join('');
+  document.head.appendChild(st);
+
+  /* ---------- 反馈窗口 ---------- */
+  var wrap=document.createElement('div');
+  wrap.id='fbwrap'; wrap.className='modal hidden';
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click',function(e){ if(e.target===wrap) hide(); });
+
+  function draw(){
+    var z=Z(), n=0;
+    try{ n=(JSON.parse(localStorage.getItem(KEY)||'[]')||[]).length; }catch(e){}
+    wrap.innerHTML=''
+     +'<div class="sheet">'
+     +'  <h2>✉️ '+(z?'反馈建议':'Send Feedback')+'</h2>'
+     +'  <div class="tip">'+(z?'玩的时候遇到问题、觉得哪里不公平、或者有好点子，都可以写在这里。写完点提交，再把它发给我就行。':'Found a bug, an unfair mechanic, or have an idea? Write it here, then send it to me.')+'</div>'
+     +'  <div class="chips">'+TYPE[z?'zh':'en'].map(function(x,i){ return '<button class="chip'+(i===cur?' on':'')+'" data-i="'+i+'">'+x+'</button>'; }).join('')+'</div>'
+     +'  <textarea id="fbText" placeholder="'+(z?'例如：III 期通过率太低 / 销售投入的收益不直观 / 希望加一个重置存档按钮':'e.g. Phase III feels too punishing / sales spend is hard to judge / please add a reset button')+'"></textarea>'
+     +'  <div class="tip">'+(z?'会自动附上：版本号 · 公司名 · 当前季度 · 难度 · 已上市数 · 界面语言 · 设备信息（不含个人信息）':'Automatically attached: version · company · quarter · difficulty · launches · UI language · device info (no personal data)')+'</div>'
+     +'  <button class="primary" id="fbSend" style="width:100%">'+(z?'提交 / 复制内容':'Submit / Copy')+'</button>'
+     +'  <div class="two">'
+     +'    <button class="ghost" id="fbHis">'+(z?('本机记录（'+n+'）'):('My feedback ('+n+')'))+'</button>'
+     +'    <button class="ghost" id="fbClose">'+(z?'关闭':'Close')+'</button>'
+     +'  </div>'
+     +'  <div class="done" id="fbDone"></div>'
+     +'</div>';
+    var cs=wrap.querySelectorAll('.chip');
+    for(var i=0;i<cs.length;i++) cs[i].onclick=function(){ cur=parseInt(this.getAttribute('data-i'),10)||0; draw(); };
+    wrap.querySelector('#fbSend').onclick=send;
+    wrap.querySelector('#fbClose').onclick=hide;
+    wrap.querySelector('#fbHis').onclick=history;
+    var ta=wrap.querySelector('#fbText');
+    ta.value=draft;
+    ta.oninput=function(){ draft=this.value; };
+  }
+
+  function ctx(){
+    var z=Z(), s=(typeof S!=='undefined'&&S)?S:null, out=[];
+    out.push(z?'【新药风云 · 玩家反馈】':'[Pharma Rush · Player Feedback]');
+    out.push((z?'类型：':'Type: ')+TYPE[z?'zh':'en'][cur]);
+    out.push((z?'内容：':'Content: ')+(draft.replace(/^\s+|\s+$/g,'')||(z?'（未填写）':'(empty)')));
+    out.push(z?'—— 以下自动附上 ——':'—— Attached automatically ——');
+    out.push((z?'版本：':'Version: ')+'v3.9');
+    out.push((z?'公司：':'Company: ')+(s?s.co:'—'));
+    if(s&&s.q){ var q=s.q-1; out.push((z?'进度：':'Progress: ')+(z?('第 '+(Math.floor(q/4)+1)+' 年 Q'+(q%4+1)):('Y'+(Math.floor(q/4)+1)+' Q'+(q%4+1)))); }
+    var dn='—'; try{ if(s&&s.diff) dn=tx(s.diff.n); }catch(e){}
+    out.push((z?'难度：':'Difficulty: ')+dn);
+    out.push((z?'已上市产品：':'Launched: ')+((s&&s.launched)?s.launched:0));
+    out.push((z?'界面语言：':'UI language: ')+L());
+    out.push((z?'设备：':'Device: ')+navigator.userAgent);
+    out.push((z?'时间：':'Time: ')+new Date().toLocaleString());
+    return out.join('\n');
+  }
+
+  function copyText(t){
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t); return true; } }catch(e){}
+    try{
+      var ta=document.createElement('textarea');
+      ta.value=t; ta.style.position='fixed'; ta.style.left='-9999px';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var ok=document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    }catch(e){ return false; }
+  }
+
+  function send(){
+    var z=Z(), t=ctx();
+    try{
+      var arr=JSON.parse(localStorage.getItem(KEY)||'[]');
+      if(!(arr instanceof Array)) arr=[];
+      arr.unshift({t:Date.now(),type:cur,text:t});
+      if(arr.length>50) arr=arr.slice(0,50);
+      localStorage.setItem(KEY,JSON.stringify(arr));
+    }catch(e){}
+    var ok=copyText(t);
+    if(FB_URL && FB_URL.length>6){ try{ window.open(FB_URL,'_blank'); }catch(e){} }
+    var d=wrap.querySelector('#fbDone');
+    if(!d) return;
+    d.className='done on';
+    d.innerHTML = (ok ? (z?'✅ 已复制到剪贴板':'✅ Copied to clipboard')
+                      : (z?'⚠️ 没复制成功，请长按下面文字手动选中复制':'⚠️ Copy failed — long-press the text below to copy'))
+      + '<div style="margin-top:8px">'+(z?'把它发给：':'Send it to: ')+'<b>'+esc2(FB_CONTACT)+'</b></div>'
+      + '<button class="chip" id="fbAgain" style="margin-top:8px;width:100%">'+(z?'再复制一次':'Copy again')+'</button>'
+      + '<div class="tip" style="margin:8px 0 4px">'+(z?'内容预览（可长按选中）：':'Preview (long-press to select):')+'</div>'
+      + '<textarea readonly style="min-height:120px">'+esc2(t)+'</textarea>';
+    var ag=d.querySelector('#fbAgain');
+    if(ag) ag.onclick=function(){ if(copyText(t)) ag.textContent=z?'✅ 已复制':'✅ Copied'; };
+  }
+
+  function history(){
+    var z=Z(), arr=[], box=wrap.querySelector('#fbDone');
+    if(!box) return;
+    try{ arr=JSON.parse(localStorage.getItem(KEY)||'[]')||[]; }catch(e){}
+    box.className='done on';
+    if(!arr.length){ box.innerHTML=z?'本机还没有提交过反馈。':'No feedback on this device yet.'; return; }
+    var all=arr.map(function(x,i){ return (i+1)+'. '+x.text; }).join('\n\n');
+    var ok=copyText(all);
+    box.innerHTML=z?('本机共 '+arr.length+' 条，'+(ok?'已全部复制到剪贴板。':'复制失败，请逐条长按复制。'))
+                   :('Total '+arr.length+' on this device'+(ok?', all copied.':', copy failed.'));
+  }
+
+  function show(){ cur=cur||0; draft=draft||''; draw(); wrap.classList.remove('hidden'); }
+  function hide(){ wrap.classList.add('hidden'); }
+
+  function addBtn(){
+    if(document.querySelector('h1 a[data-t="fb"]')) return;
+    var anchor=document.querySelector('h1 a[data-t="rules"]')||document.querySelector('#lang-btn')||document.querySelector('h1');
+    if(!anchor||!anchor.parentNode) return;
+    var a=document.createElement('a');
+    a.setAttribute('href','javascript:void(0)');
+    if(dictOK) a.setAttribute('data-t','fb');
+    a.textContent = Z()?'反馈':'Feedback';
+    a.onclick=show;
+    anchor.parentNode.appendChild(a);
+  }
+  addBtn();
+})();
+</script>
 </html>
